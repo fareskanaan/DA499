@@ -1,0 +1,8 @@
+os
+cv2
+numpy
+streamlit
+tensorflow
+matplotlib
+tensorflow
+gdown
