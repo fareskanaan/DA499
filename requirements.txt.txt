@@ -1,8 +1,6 @@
-os
-cv2
-numpy
 streamlit
+opencv-python-headless
+numpy
 tensorflow
 matplotlib
-tensorflow
 gdown
