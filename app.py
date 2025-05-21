@@ -5,6 +5,7 @@ import streamlit as st
 import tensorflow as tf
 from tensorflow.keras.models import load_model
 import gdown
+import h5py
 
 # -------------------- Configurations --------------------
 IMG_SIZE = (600, 600)
@@ -21,17 +22,33 @@ st.markdown("<h1 style='text-align:center; color:#2E86C1;'>🫁 Chest X-ray Clas
 st.markdown("<p style='text-align:center; color:#555;'>Upload a chest X-ray image. The model will classify and explain the result using Grad-CAM.</p>", unsafe_allow_html=True)
 st.markdown("<hr style='border: 2px solid #2E86C1;'>", unsafe_allow_html=True)
 
-# -------------------- Load Model --------------------
-if not os.path.exists(MODEL_PATH):
-    st.info("⏳ Downloading the model...")
-    gdown.download(MODEL_URL, MODEL_PATH, quiet=False)
+# -------------------- Check and Download Model --------------------
+def is_valid_h5_file(file_path):
+    """Check if the file is a valid HDF5 file."""
+    try:
+        with h5py.File(file_path, 'r') as f:
+            return True
+    except:
+        return False
 
+if not os.path.exists(MODEL_PATH) or not is_valid_h5_file(MODEL_PATH):
+    st.info("⏳ Downloading the model from Google Drive...")
+    try:
+        gdown.download(MODEL_URL, MODEL_PATH, quiet=False)
+        if not is_valid_h5_file(MODEL_PATH):
+            st.error("❌ Downloaded model file is corrupted or not a valid HDF5 file. Please check the Google Drive link or upload the model manually.")
+            st.stop()
+    except Exception as e:
+        st.error(f"❌ Failed to download the model: {str(e)}. Ensure the Google Drive link is publicly accessible.")
+        st.stop()
+
+# -------------------- Load Model --------------------
 try:
     model = load_model(MODEL_PATH, compile=False)
     model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
     st.success("✅ Model loaded successfully.")
 except Exception as e:
-    st.error(f"❌ Failed to load the model: {str(e)}")
+    st.error(f"❌ Failed to load the model: {str(e)}. Try re-downloading or using a different model file.")
     st.stop()
 
 # -------------------- Chest X-ray Validation Function --------------------
@@ -49,7 +66,7 @@ def is_chest_xray(image):
     channel_diff = np.mean(np.abs(r - g)) + np.mean(np.abs(g - b)) + np.mean(np.abs(b - r))
     is_grayscale = channel_diff < 10  # Threshold for grayscale-like images
     
-    # Check intensity distribution (chest X-rays have high contrast between bones and tissues)
+    # Check intensity distribution (chest X-rays have high contrast)
     gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
     intensity_std = np.std(gray)
     is_high_contrast = intensity_std > 30  # Typical for chest X-rays
