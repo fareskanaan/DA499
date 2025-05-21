@@ -27,10 +27,7 @@ if not os.path.exists(MODEL_PATH):
     with st.spinner("📥 Downloading model..."):
         gdown.download(MODEL_URL, MODEL_PATH, quiet=False)
 
-# Double check file size
-if not os.path.exists(MODEL_PATH) or os.path.getsize(MODEL_PATH) < 1_000_000:
-    st.error("❌ Failed to load model file. Please check the download link or file size.")
-    st.stop()
+
 
 # -------------------- Load model --------------------
 model = load_model(MODEL_PATH, compile=False)
