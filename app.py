@@ -11,7 +11,7 @@ import gdown
 IMG_SIZE = (600, 600)
 MODEL_PATH = "vgg16_stream.h5"
 FILE_ID = "10gGgSNo9BZaOTlY2ewYTXcbLaSJP9GkW"
-MODEL_URL = f"https://drive.google.com/uc?id={FILE_ID}"
+MODEL_URL = "https://drive.google.com/uc?id=10gGgSNo9BZaOTlY2ewYTXcbLaSJP9GkW"
 CLASS_NAMES = ['Normal', 'Pneumonia-Bacterial', 'Viral Pneumonia']
 LAST_CONV_LAYER = 'block5_conv3'
 
