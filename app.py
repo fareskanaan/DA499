@@ -9,9 +9,28 @@ import gdown
 
 # -------------------- Settings --------------------
 IMG_SIZE = (600, 600)
+import gdown
+
+MODEL_URL = "https://drive.google.com/uc?export=download&id=10gGgSNo9BZaOTlY2ewYTXcbLaSJP9GkW"
 MODEL_PATH = "vgg16_stream.h5"
+
+if not os.path.exists(MODEL_PATH):
+    try:
+        gdown.download(MODEL_URL, MODEL_PATH, quiet=False)
+    except Exception as e:
+        st.error(f"❌ Failed to download model.\n\n**{e}**")
+        st.stop()
+
+try:
+    model = load_model(MODEL_PATH, compile=False)
+    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+except Exception as e:
+    st.error("❌ Failed to load the model. Make sure the file is a valid `.h5` Keras model.")
+    st.stop()
+
+#MODEL_PATH = "vgg16_stream.h5"
 FILE_ID = "10gGgSNo9BZaOTlY2ewYTXcbLaSJP9GkW"
-MODEL_URL = "https://drive.google.com/uc?id=10gGgSNo9BZaOTlY2ewYTXcbLaSJP9GkW"
+#MODEL_URL = "https://drive.google.com/uc?export=download&id=10gGgSNo9BZaOTlY2ewYTXcbLaSJP9GkW"
 CLASS_NAMES = ['Normal', 'Pneumonia-Bacterial', 'Viral Pneumonia']
 LAST_CONV_LAYER = 'block5_conv3'
 
