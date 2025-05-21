@@ -5,88 +5,122 @@ import streamlit as st
 import tensorflow as tf
 from tensorflow.keras.models import load_model
 import gdown
-from PIL import Image
 
-# -------------------- Settings --------------------
-IMG_SIZE = (512, 512)
-MODEL_PATH = "effnet_b4_model.h5"
+# -------------------- Configurations --------------------
+IMG_SIZE = (600, 600)
+MODEL_PATH = "vgg16_restored_final.h5"
 FILE_ID = "10gGgSNo9BZaOTlY2ewYTXcbLaSJP9GkW"
+MODEL_URL = f"https://drive.google.com/uc?id={FILE_ID}"
 CLASS_NAMES = ['Normal', 'Pneumonia-Bacterial', 'Viral Pneumonia']
+LAST_CONV_LAYER = 'block5_conv3'
 
-# -------------------- App Interface --------------------
+# -------------------- Streamlit Page Setup --------------------
 st.set_page_config(page_title="🫁 Chest X-ray Classifier", layout="centered")
-st.title("🫁 AI Chest X-ray Classifier")
-st.markdown("Upload a chest X-ray image for classification")
 
-# -------------------- Model Loading with Validation --------------------
-@st.cache_resource
-def load_ai_model():
-    try:
-        if not os.path.exists(MODEL_PATH):
-            with st.spinner('Downloading model...'):
-                gdown.download(f"https://drive.google.com/uc?id={FILE_ID}", MODEL_PATH, quiet=False)
-        
-        # Verify model file integrity
-        if os.path.getsize(MODEL_PATH) < 1024*1024:  # Check if file is too small
-            raise ValueError("Model file appears corrupted (too small)")
-            
-        model = load_model(MODEL_PATH, compile=False)
-        model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
-        return model
-    except Exception as e:
-        st.error(f"Failed to load model: {str(e)}")
-        st.stop()
+st.markdown("<h1 style='text-align:center; color:#2E86C1;'>🫁 Chest X-ray Classifier</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align:center; color:#555;'>Upload a chest X-ray image. The model will classify and explain the result using Grad-CAM.</p>", unsafe_allow_html=True)
+st.markdown("<hr style='border: 2px solid #2E86C1;'>", unsafe_allow_html=True)
+
+# -------------------- Load Model --------------------
+if not os.path.exists(MODEL_PATH):
+    st.info("⏳ Downloading the model...")
+    gdown.download(MODEL_URL, MODEL_PATH, quiet=False)
 
 try:
-    model = load_ai_model()
+    model = load_model(MODEL_PATH, compile=False)
+    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+    st.success("✅ Model loaded successfully.")
 except Exception as e:
-    st.error(f"Critical error loading model: {str(e)}")
+    st.error(f"❌ Failed to load the model: {str(e)}")
     st.stop()
 
-# -------------------- Image Processing --------------------
-def preprocess_image(image):
-    try:
-        if isinstance(image, Image.Image):
-            image = np.array(image)
-            
-        if len(image.shape) == 3:
-            image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-            
-        image = cv2.resize(image, IMG_SIZE)
-        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
-        image = clahe.apply(image)
+# -------------------- Chest X-ray Validation Function --------------------
+def is_chest_xray(image):
+    """
+    Check if the image is likely a chest X-ray based on grayscale and intensity properties.
+    Returns True if the image is a chest X-ray, False otherwise.
+    """
+    # Convert to RGB if not already
+    if len(image.shape) == 2:
         image = cv2.merge([image, image, image])
-        return image.astype('float32') / 255.0
-    except Exception as e:
-        st.error(f"Image processing error: {str(e)}")
-        st.stop()
+    
+    # Check if the image is near-grayscale (R, G, B channels are nearly identical)
+    r, g, b = cv2.split(image)
+    channel_diff = np.mean(np.abs(r - g)) + np.mean(np.abs(g - b)) + np.mean(np.abs(b - r))
+    is_grayscale = channel_diff < 10  # Threshold for grayscale-like images
+    
+    # Check intensity distribution (chest X-rays have high contrast between bones and tissues)
+    gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+    intensity_std = np.std(gray)
+    is_high_contrast = intensity_std > 30  # Typical for chest X-rays
+    
+    return is_grayscale and is_high_contrast
 
-# -------------------- Main App --------------------
-uploaded_file = st.file_uploader("Choose a chest X-ray image...", type=["jpg", "jpeg", "png"])
+# -------------------- Image Upload and Processing --------------------
+uploaded_file = st.file_uploader("📤 Choose an image...", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
     try:
-        # Read image
-        image = Image.open(uploaded_file)
-        st.image(image, caption="Uploaded Image", use_column_width=True)
-        
-        # Preprocess and predict
-        processed_img = preprocess_image(image)
-        img_array = np.expand_dims(processed_img, axis=0)
-        
-        with st.spinner('Analyzing...'):
-            preds = model.predict(img_array, verbose=0)
-            
-        class_idx = np.argmax(preds[0])
+        # Read and preprocess the image
+        file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
+        image = cv2.imdecode(file_bytes, cv2.IMREAD_GRAYSCALE)
+        original_shape = image.shape
+
+        # Check if the image is a chest X-ray
+        image_rgb = cv2.cvtColor(cv2.merge([image, image, image]), cv2.COLOR_BGR2RGB)
+        if not is_chest_xray(image_rgb):
+            st.error("❌ This is not a chest X-ray image. Please upload a valid chest X-ray.")
+            st.stop()
+
+        # Resize and apply CLAHE
+        if original_shape[:2] != IMG_SIZE:
+            st.info(f"🔄 Resized from original shape {original_shape} to {IMG_SIZE}")
+        image = cv2.resize(image, IMG_SIZE)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        image = clahe.apply(image)
+        image_rgb = cv2.merge([image, image, image])
+        image_norm = image_rgb.astype('float32') / 255.0
+        img_array = np.expand_dims(image_norm, axis=0)
+
+        # Display the input image
+        st.image(image_rgb, caption="🩻 Input Image", use_column_width=True)
+
+        # Model prediction
+        preds = model.predict(img_array)
+        class_idx = int(np.argmax(preds[0]))
         predicted_class = CLASS_NAMES[class_idx]
         confidence = np.max(preds[0]) * 100
-        
-        st.success(f"**Result:** {predicted_class} ({confidence:.1f}% confidence)")
-        
-        # Show probabilities
-        st.subheader("Detailed Probabilities:")
-        for i, (cls, prob) in enumerate(zip(CLASS_NAMES, preds[0])):
-            st.progress(float(prob), text=f"{cls}: {prob*100:.1f}%")
-            
+
+        st.success(f"✅ **Prediction:** {predicted_class} ({confidence:.2f}%)")
+
+        # -------------------- Grad-CAM Visualization --------------------
+        grad_model = tf.keras.models.Model([model.inputs], [model.get_layer(LAST_CONV_LAYER).output, model.output])
+        with tf.GradientTape() as tape:
+            conv_outputs, predictions = grad_model(img_array)
+            loss = predictions[:, class_idx]
+
+        grads = tape.gradient(loss, conv_outputs)[0]
+        conv_outputs = conv_outputs[0]
+        weights = tf.reduce_mean(grads, axis=(0, 1))
+        cam = np.zeros(conv_outputs.shape[:2], dtype=np.float32)
+        for i, w in enumerate(weights):
+            cam += w * conv_outputs[:, :, i]
+
+        cam = np.maximum(cam, 0)
+        cam = cv2.resize(cam, IMG_SIZE)
+        cam = (cam - cam.min()) / (cam.max() - cam.min() + 1e-8)
+        heatmap = (cam * 255).astype("uint8")
+        heatmap = cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
+        heatmap = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)  # Convert to RGB for Streamlit
+        overlay = cv2.addWeighted(image_rgb, 0.6, heatmap, 0.4, 0)
+
+        st.markdown("<hr style='border: 1px solid #aaa;'>", unsafe_allow_html=True)
+        st.subheader("🔍 Model Explanation: Grad-CAM")
+        st.image(overlay, caption="🔥 Grad-CAM Heatmap (Highlights important regions)", use_column_width=True)
+
     except Exception as e:
-        st.error(f"Error during prediction: {str(e)}")
+        st.error(f"❌ Failed to process the image: {str(e)}")
+
+# -------------------- Footer --------------------
+st.markdown("<hr style='border: 1px solid #aaa;'>", unsafe_allow_html=True)
+st.markdown("<p style='text-align:center; color:#555;'>Built with Streamlit and TensorFlow. For chest X-ray classification.</p>", unsafe_allow_html=True)
