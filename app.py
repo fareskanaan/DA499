@@ -9,8 +9,8 @@ import gdown
 
 # -------------------- Configuration --------------------
 IMG_SIZE = (600, 600)
-MODEL_PATH = "vgg16_stream_no_oversample.h5"
-FILE_ID = "1UJ441zgwqkgVoUxkBn_Ruhysn3iPrrE1"
+MODEL_PATH = "vgg16_stream_no_oversample.keras"
+FILE_ID = "1XAFl3XA6lSqB7Lcvr85nWoEz2ohZ31dy"
 MODEL_URL = f"https://drive.google.com/uc?id={FILE_ID}"
 CLASS_NAMES = ['Normal', 'Pneumonia-Bacterial', 'Viral Pneumonia']
 LAST_CONV_LAYER = 'block5_conv3'
@@ -26,7 +26,7 @@ st.markdown("<hr style='border: 2px solid #2E86C1;'>", unsafe_allow_html=True)
 if not os.path.exists(MODEL_PATH):
     gdown.download(MODEL_URL, MODEL_PATH, quiet=False)
 
-model = load_model(MODEL_PATH, compile=False)
+model = tf.keras.models.load_model(MODEL_PATH, compile=False)
 model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
 # -------------------- Upload Image --------------------
